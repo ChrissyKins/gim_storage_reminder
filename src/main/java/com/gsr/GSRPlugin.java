@@ -19,6 +19,12 @@ import java.util.Set;
 import net.runelite.api.KeyCode;
 import java.util.stream.Collectors;
 import net.runelite.client.events.ConfigChanged;
+import net.runelite.api.ItemContainer;
+import net.runelite.api.Item;
+import net.runelite.api.InventoryID;
+import net.runelite.api.ItemID;
+import java.awt.image.BufferedImage;
+import net.runelite.api.events.ItemContainerChanged;
 
 @Slf4j
 @PluginDescriptor(
@@ -45,6 +51,7 @@ public class GSRPlugin extends Plugin
 
     private GIMItemOverlay itemOverlay;
     private Set<String> taggedItems;
+    private GIMItemInfoBox infoBox;
 
     @Override
     protected void startUp()
@@ -115,6 +122,43 @@ public class GSRPlugin extends Plugin
             );
         }
         config.setTaggedItems(String.join(",", taggedItems));
+
+        // Check containers after toggling tag
+        boolean hasGIMItems = false;
+        
+        ItemContainer inventory = client.getItemContainer(InventoryID.INVENTORY);
+        if (inventory != null)
+        {
+            hasGIMItems |= checkContainerForGIMItems(inventory);
+        }
+
+        ItemContainer equipment = client.getItemContainer(InventoryID.EQUIPMENT);
+        if (equipment != null)
+        {
+            hasGIMItems |= checkContainerForGIMItems(equipment);
+        }
+
+        ItemContainer bank = client.getItemContainer(InventoryID.BANK);
+        if (bank != null)
+        {
+            hasGIMItems |= checkContainerForGIMItems(bank);
+        }
+
+        // Update info box
+        if (hasGIMItems)
+        {
+            if (infoBox == null)
+            {
+                final BufferedImage image = itemManager.getImage(ItemID.GROUP_IRONMAN_HELM);
+                infoBox = new GIMItemInfoBox(image, this);
+                infoBoxManager.addInfoBox(infoBox);
+            }
+        }
+        else if (infoBox != null)
+        {
+            infoBoxManager.removeInfoBox(infoBox);
+            infoBox = null;
+        }
     }
 
     public boolean isGIMItem(int itemId)
@@ -144,6 +188,80 @@ public class GSRPlugin extends Plugin
         {
             taggedItems = loadTaggedItems();
         }
+    }
+
+    @Subscribe
+    public void onItemContainerChanged(ItemContainerChanged event)
+    {
+        // Check if container is one we care about
+        if (event.getContainerId() != InventoryID.INVENTORY.getId() &&
+            event.getContainerId() != InventoryID.EQUIPMENT.getId() &&
+            event.getContainerId() != InventoryID.BANK.getId())
+        {
+            return;
+        }
+
+        boolean hasGIMItems = false;
+        ItemContainer container = event.getItemContainer();
+
+        if (container == null)
+        {
+            return;
+        }
+
+        // Check inventory
+        ItemContainer inventory = client.getItemContainer(InventoryID.INVENTORY);
+        if (inventory != null)
+        {
+            hasGIMItems |= checkContainerForGIMItems(inventory);
+        }
+
+        // Check equipment
+        ItemContainer equipment = client.getItemContainer(InventoryID.EQUIPMENT);
+        if (equipment != null)
+        {
+            hasGIMItems |= checkContainerForGIMItems(equipment);
+        }
+
+        // Check bank
+        ItemContainer bank = client.getItemContainer(InventoryID.BANK);
+        if (bank != null)
+        {
+            hasGIMItems |= checkContainerForGIMItems(bank);
+        }
+
+        // Manage the info box based on GIM item presence
+        if (hasGIMItems)
+        {
+            if (infoBox == null)
+            {
+                final BufferedImage image = itemManager.getImage(ItemID.GROUP_IRONMAN_HELM);
+                infoBox = new GIMItemInfoBox(image, this);
+                infoBoxManager.addInfoBox(infoBox);
+            }
+        }
+        else if (infoBox != null)
+        {
+            infoBoxManager.removeInfoBox(infoBox);
+            infoBox = null;
+        }
+    }
+
+    private boolean checkContainerForGIMItems(ItemContainer container)
+    {
+        for (Item item : container.getItems())
+        {
+            if (item == null)
+            {
+                continue;
+            }
+
+            if (isGIMItem(item.getId()))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Provides
